@@ -1,28 +1,292 @@
-import backgroundImage from '../resources/sprites/background-day.png';
+import backgroundDaySprite from '../resources/sprites/background-day.png';
+import backgroundNightSprite from '../resources/sprites/background-night.png';
+import baseSprite from '../resources/sprites/base.png';
+import birdDownflapSprite from '../resources/sprites/bluebird-downflap.png';
+import birdMidflapSprite from '../resources/sprites/bluebird-midflap.png';
+import birdUpflapSprite from '../resources/sprites/bluebird-upflap.png';
+import pipeBottomSprite from '../resources/sprites/pipe-green-bottom.png';
+import pipeTopSprite from '../resources/sprites/pipe-green-top.png';
+
+import messageSprite from '../resources/sprites/message.png';
+import gameOverSprite from '../resources/sprites/gameover.png';
+
+import zeroSprite from '../resources/sprites/0.png';
+import oneSprite from '../resources/sprites/1.png';
+import twoSprite from '../resources/sprites/2.png';
+import threeSprite from '../resources/sprites/3.png';
+import fourSprite from '../resources/sprites/4.png';
+import fiveSprite from '../resources/sprites/5.png';
+import sixSprite from '../resources/sprites/6.png';
+import sevenSprite from '../resources/sprites/7.png';
+import eightSprite from '../resources/sprites/8.png';
+import nineSprite from '../resources/sprites/9.png';
+
+const SPEED = 1;
+
+const BIRB_X = 20;
+
+const GAP = 80;
+
+const DEFAULT_PIPE_TOP_Y = -100;
+const MIN_PIPE_TOP_Y = 50;
+const MAX_PIPE_TOP_Y = -50;
+
+const NEW_PIPE_THRESHOLD = 125;
+
+// Inclusive min, exclusive max.
+const getRandomInt = (min: number, max: number): number => {
+	return Math.floor(Math.random() * (max - min) + min);
+}
+
+interface Coordinates {
+	x: number;
+	y: number;
+}
+
+enum GameStage {
+	GAMEOVER,
+	RUNNING,
+	READY_TO_START,
+}
+
+enum BirbState {
+	RISING,
+	MIDFLAP,
+	FALLING,
+}
 
 class Game {
-	canvas: HTMLCanvasElement | null = null;
-	context: CanvasRenderingContext2D | null = null;
+	canvas: HTMLCanvasElement;
+	context: CanvasRenderingContext2D;
+
+	pipes: Coordinates[] = [];
+	velocity = 2;
+	birbY: number = 0;
+	stage: GameStage = GameStage.READY_TO_START;
+	needToReset: boolean = true;
+	score: number = 0;
+
+	base: HTMLImageElement;
+	newgame: HTMLImageElement;
+	gameover: HTMLImageElement;
+	pipeTop: HTMLImageElement;
+	pipeBottom: HTMLImageElement;
+
+	background: HTMLImageElement | null = null;
+	backgrounds: HTMLImageElement[] = [];
+	birb: HTMLImageElement | null = null;
+	birbs: HTMLImageElement[] = [];
+	numbers: HTMLImageElement[] = [];
+
+	handleClickBound: () => void = () => this.handleClick();
 
 	constructor() {
 		this.canvas = <HTMLCanvasElement>document.querySelector('#canvas');
-		this.context = this.canvas.getContext('2d');
+		this.context = this.canvas.getContext('2d')!;
+
+		this.base = new Image();
+		this.newgame = new Image();
+		this.gameover = new Image();
+		this.pipeTop = new Image();
+		this.pipeBottom = new Image();
+		this.backgrounds.push(new Image(), new Image());
+		this.birbs.push(new Image(), new Image(), new Image());
+		this.numbers.push(new Image(), new Image(), new Image(),
+				new Image(), new Image(), new Image(), new Image(),
+				new Image(), new Image(), new Image());
 	}
 
-	setBackground(): void {
-		const background = new Image();
-		background.onload = () => {
-			this.context!.drawImage(background, 0, 0, 288, 512);
-		};
-		background.src = backgroundImage;
+	loadImage(img: HTMLImageElement, src: any): Promise<HTMLImageElement> {
+		const promise = new Promise<HTMLImageElement>((resolve) =>
+				img.addEventListener('load', () => resolve(img)));
+		img.src = src;
+
+		return promise;
 	}
 
-	run() {
-		if (!this.context) {
+	async loadImages(): Promise<void> {
+		await Promise.all([
+			this.loadImage(this.base, baseSprite),
+			this.loadImage(this.pipeTop, pipeTopSprite),
+			this.loadImage(this.pipeBottom, pipeBottomSprite),
+			this.loadImage(this.newgame, messageSprite),
+			this.loadImage(this.gameover, gameOverSprite),
+			this.loadImage(this.backgrounds[0], backgroundDaySprite),
+			this.loadImage(this.backgrounds[1], backgroundNightSprite),
+			this.loadImage(this.birbs[BirbState.FALLING], birdUpflapSprite),
+			this.loadImage(this.birbs[BirbState.MIDFLAP], birdMidflapSprite),
+			this.loadImage(this.birbs[BirbState.RISING], birdDownflapSprite),
+			this.loadImage(this.numbers[0], zeroSprite),
+			this.loadImage(this.numbers[1], oneSprite),
+			this.loadImage(this.numbers[2], twoSprite),
+			this.loadImage(this.numbers[3], threeSprite),
+			this.loadImage(this.numbers[4], fourSprite),
+			this.loadImage(this.numbers[5], fiveSprite),
+			this.loadImage(this.numbers[6], sixSprite),
+			this.loadImage(this.numbers[7], sevenSprite),
+			this.loadImage(this.numbers[8], eightSprite),
+			this.loadImage(this.numbers[9], nineSprite),
+		]);
+	}
+
+	flyUp(): void {
+		this.velocity = this.velocity - 5 < -4
+				? -4
+				: this.velocity - 5;
+	}
+
+	checkCollisions(pipe: Coordinates): boolean {
+		const birbRight = BIRB_X + this.birb!.width;
+		const birbBottom = this.birbY + this.birb!.height;
+		const pipeTopEdge = pipe.y + this.pipeTop.height;
+		const pipeBottomEdge = pipe.y + this.pipeTop.height + GAP;
+
+		if (birbRight > pipe.x && birbRight < pipe.x + this.pipeTop.width &&
+			 (this.birbY < pipeTopEdge || birbBottom > pipeBottomEdge)) {
+			return true;
+		}
+
+		if (this.birbY + this.birb!.height > this.canvas!.height - this.base.height ||
+				this.birbY < 0) {
+			return true;
+		}
+
+		return false;
+	}
+
+	selectBirb(): HTMLImageElement {
+		if (this.velocity > 0.12) {
+			return this.birbs[BirbState.RISING];
+		}
+		if (this.velocity < -0.12) {
+			return this.birbs[BirbState.FALLING];
+		}
+		return this.birbs[BirbState.MIDFLAP];
+	}
+
+	gameOver(): void {
+		this.context.drawImage(this.gameover,
+				this.canvas.width / 2 - this.gameover.width / 2,
+				this.canvas.height / 2 - this.gameover.height / 2);
+		this.needToReset = true;
+	}
+
+	displayScore(): void {
+		const scoreNumbers = this.score.toString().split('');
+		const scoreXStart = this.canvas.width - 10;
+		const scoreY = this.canvas.height - 10 - this.numbers[0].height;
+		let scoreWidth = 0;
+
+		for (let i = 0; i < scoreNumbers.length; i++) {
+			const curNumStr = scoreNumbers[scoreNumbers.length - 1 - i]
+			const curNum = parseInt(curNumStr, 10);
+			const curNumWidth = this.numbers[curNum].width;
+			const curNumX = scoreXStart - scoreWidth - curNumWidth;
+			scoreWidth += curNumWidth;
+			this.context!.drawImage(this.numbers[curNum], curNumX, scoreY);
+		}
+	}
+
+	drawLoop(): void {
+		if (this.stage === GameStage.GAMEOVER) {
+			this.gameOver();
 			return;
 		}
 
-		this.setBackground();
+		let scored = false;
+
+		this.birb = this.selectBirb();
+
+		this.context.drawImage(this.background!, 0, 0);
+
+		for (const pipe of this.pipes) {
+			this.context.drawImage(this.pipeTop, pipe.x, pipe.y);
+			this.context.drawImage(this.pipeBottom,
+				pipe.x, pipe.y + this.pipeBottom.height + GAP);
+			pipe.x -= SPEED;
+
+			if (pipe.x === NEW_PIPE_THRESHOLD) {
+				this.pipes.push({
+					x: this.canvas.width,
+					y: getRandomInt(MIN_PIPE_TOP_Y - this.pipeTop.height, MAX_PIPE_TOP_Y),
+				});
+			}
+
+			if (this.checkCollisions(pipe)) {
+				this.context!.drawImage(this.birb, BIRB_X, this.birbY);
+				this.context.drawImage(this.base, 0, this.canvas.height - this.base.height);
+				this.stage = GameStage.GAMEOVER;
+			}
+
+			if (!scored && pipe.x + this.pipeTop.width - 10 === BIRB_X) {
+				this.score++;
+				scored = false;
+			}
+		}
+
+		this.context!.drawImage(this.birb, BIRB_X, this.birbY);
+		this.context.drawImage(this.base, 0, this.canvas!.height - this.base.height);
+		this.displayScore();
+
+		if (this.velocity < 2) {
+			this.velocity += 0.1;
+		}
+		this.birbY += this.velocity;
+
+		requestAnimationFrame(() => this.drawLoop());
+	}
+
+	resetIfNeeded(): void {
+		if (!this.needToReset) {
+			return;
+		}
+		this.needToReset = false;
+
+		this.velocity = 0;
+		this.score = 0;
+		this.birb = this.selectBirb();
+		this.birbY = Math.floor(this.canvas.height / 2) - Math.floor(this.birb.height / 2);
+
+		const randomBackgroundIndex = getRandomInt(0, this.backgrounds.length);
+		this.background = this.backgrounds[randomBackgroundIndex];
+
+		this.context.drawImage(this.background, 0, 0);
+		this.context!.drawImage(this.birb, BIRB_X, this.birbY);
+		this.context.drawImage(this.base, 0, this.canvas!.height - this.base.height);
+		this.context.drawImage(this.newgame,
+				this.canvas.width / 2 - this.newgame.width / 2,
+				this.canvas.height / 2 - this.newgame.height / 2);
+
+		this.pipes = [{
+			x: this.canvas.width,
+			y: DEFAULT_PIPE_TOP_Y,
+		}];
+	}
+
+	async run(): Promise<void> {
+		await this.loadImages();
+		this.resetIfNeeded();
+
+		window.addEventListener('click', this.handleClickBound);
+	}
+
+	handleClick(): void {
+		switch (this.stage) {
+			case GameStage.RUNNING:
+				this.flyUp();
+				break;
+			case GameStage.READY_TO_START:
+				this.stage = GameStage.RUNNING;
+				this.resetIfNeeded();
+				this.drawLoop();
+				break;
+			case GameStage.GAMEOVER:
+				this.stage = GameStage.READY_TO_START;
+				this.resetIfNeeded();
+				break;
+			default:
+				return;
+		}
 	}
 }
 
