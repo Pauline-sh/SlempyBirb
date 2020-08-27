@@ -187,24 +187,16 @@ class Game {
 		}
 	}
 
-	drawLoop(): void {
-		if (this.stage === GameStage.GAMEOVER) {
-			this.gameOver();
-			return;
-		}
-
+	drawPipes(): void {
 		let scored = false;
-
-		this.birb = this.selectBirb();
-
-		this.context.drawImage(this.background!, 0, 0);
-
-		for (const pipe of this.pipes) {
+		for (let i = 0; i < this.pipes.length; i++) {
+			const pipe = this.pipes[i];
 			this.context.drawImage(this.pipeTop, pipe.x, pipe.y);
 			this.context.drawImage(this.pipeBottom,
 				pipe.x, pipe.y + this.pipeBottom.height + GAP);
 			pipe.x -= SPEED;
 
+			// Add pipe if needed.
 			if (pipe.x === NEW_PIPE_THRESHOLD) {
 				this.pipes.push({
 					x: this.canvas.width,
@@ -213,17 +205,35 @@ class Game {
 			}
 
 			if (this.checkCollisions(pipe)) {
-				this.context!.drawImage(this.birb, BIRB_X, this.birbY);
+				this.context!.drawImage(this.birb!, BIRB_X, this.birbY);
 				this.context.drawImage(this.base, 0, this.canvas.height - this.base.height);
 				this.stage = GameStage.GAMEOVER;
 			}
 
+			// Check score.
 			if (!scored && pipe.x + this.pipeTop.width - 10 === BIRB_X) {
 				this.score++;
 				scored = false;
 			}
+
+			// Remove pipe if it's off screen.
+			if (pipe.x + this.pipeTop.width < 0) {
+				this.pipes.shift();
+				i = i - 1;
+			}
+		}
+	}
+
+	drawLoop(): void {
+		if (this.stage === GameStage.GAMEOVER) {
+			this.gameOver();
+			return;
 		}
 
+		this.birb = this.selectBirb();
+
+		this.context.drawImage(this.background!, 0, 0);
+		this.drawPipes();
 		this.context!.drawImage(this.birb, BIRB_X, this.birbY);
 		this.context.drawImage(this.base, 0, this.canvas!.height - this.base.height);
 		this.displayScore();
