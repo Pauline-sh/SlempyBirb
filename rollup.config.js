@@ -7,6 +7,7 @@ import nodeResolve from 'rollup-plugin-node-resolve';
 import postcss from 'rollup-plugin-postcss';
 import replace from 'rollup-plugin-replace';
 import serve from 'rollup-plugin-serve';
+import {terser} from "rollup-plugin-terser";
 import typeScript from 'rollup-plugin-typescript2';
 
 
@@ -35,6 +36,7 @@ const getPlugins = (options) => [
         tsconfig: 'tsconfig.json',
         tsconfigOverride: { compilerOptions: { 'target': options.target } }
     }),
+    terser(),
 ];
 
 export default {
