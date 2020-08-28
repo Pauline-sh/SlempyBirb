@@ -12,7 +12,20 @@
 
 <body>
   <div id="main">
+    <div class="info-item" id="info"><h3>Score 5 to receive reward!</h4></div>
     <canvas id="canvas" width="288" height="512"></canvas>
+    <input class="info-item" type="button" id="get-reward" value="Get reward!"/>
+    <div id="reward-modal">
+      <div id="reward-block">
+        <div id="close">Close</div>
+        <p>You've got a prize! Take this:</p>
+        <img src="" id="reward-img">
+        <div id="reward-buttons">
+          <input class="reward-button" id="like" type="button" value="I love it!"/>
+          <input class="reward-button" id="dislike" type="button" value="Could be better..."/>
+        </div>
+      </div>
+    </div>
   </div>
   <script src="index.min.js"></script>
 </body>
