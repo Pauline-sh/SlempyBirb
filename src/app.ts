@@ -69,6 +69,7 @@ enum BirbState {
 }
 
 class RewardModal {
+	private isVisible: boolean;
 	private gameController: Game;
 	private rewardButton: HTMLElement;
 	private rewardButtonClose: HTMLElement;
@@ -83,8 +84,11 @@ class RewardModal {
 			(e: Event) => this.handleRewardCloseClick(e);
 	private handleOpinionButtonClickBound: (e: Event) => void =
 			(e: Event) => this.handleOpinionButtonClick(e);
+	private handleWindowClickBound: (e: Event) => void =
+			(e: Event) => this.handleWindowClick(e);
 
 	constructor(gameController: Game) {
+			this.isVisible = false;
 			this.gameController = gameController;
 
 			this.rewardButton = <HTMLElement>document.querySelector('#get-reward');
@@ -98,13 +102,21 @@ class RewardModal {
 			this.rewardButtonClose.addEventListener('click', this.handleRewardCloseClickBound);
 			this.rewardButtonDislike.addEventListener('click', this.handleOpinionButtonClickBound);
 			this.rewardButtonLike.addEventListener('click', this.handleOpinionButtonClickBound);
+
+			window.addEventListener('click', this.handleWindowClickBound);
+	}
+
+	public unlockReward(): void {
+		this.rewardButton.setAttribute('style', 'visibility: visible; opacity: 1; pointer-events: auto;');
 	}
 
 	private showRewardModal(): void {
+		this.isVisible = true;
 		this.rewardModalElement.setAttribute('style', 'display: flex');
 	}
 
 	private hideRewardModal(): void {
+		this.isVisible = false;
 		this.rewardModalElement.setAttribute('style', 'display: none');
 	}
 
@@ -112,11 +124,6 @@ class RewardModal {
 		const rewards = [rewardOne, rewardTwo, rewardThree];
 		const randomRewardIndex = getRandomInt(0, rewards.length);
 		return rewards[randomRewardIndex];
-	}
-
-
-	public unlockReward(): void {
-		this.rewardButton.setAttribute('style', 'visibility: visible; opacity: 1; pointer-events: auto;');
 	}
 
 	private handleOpinionButtonClick(e: Event): void {
@@ -135,6 +142,25 @@ class RewardModal {
 		e.stopPropagation();
 		this.hideRewardModal();
 		this.gameController.resume();
+	}
+
+	private handleWindowClick(e: Event): void {
+		if (!this.isVisible) {
+			return;
+		}
+
+		e.stopPropagation();
+
+		const targetElement = <HTMLElement>e.target;
+		const rewardBlockClick = e.composedPath().find(
+				(targetFromPath: EventTarget) => {
+					const targetElementFromPath = <HTMLElement>targetFromPath;
+					return targetElementFromPath.id === 'reward-block'
+				});
+		if (targetElement.id === 'reward-modal' && !rewardBlockClick) {
+			this.hideRewardModal();
+			this.gameController.resume();
+		}
 	}
 
 	private handleRewardButtonClick(e: Event): void {
