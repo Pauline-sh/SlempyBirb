@@ -42,6 +42,14 @@ const getRandomInt = (min: number, max: number): number => {
 	return Math.floor(Math.random() * (max - min) + min);
 }
 
+const loadImage = (img: HTMLImageElement, src: any): Promise<HTMLImageElement> => {
+	const promise = new Promise<HTMLImageElement>((resolve) =>
+			img.addEventListener('load', () => resolve(img)));
+	img.src = src;
+
+	return promise;
+}
+
 interface Coordinates {
 	x: number;
 	y: number;
@@ -61,19 +69,19 @@ enum BirbState {
 }
 
 class RewardModal {
-	gameController: Game;
-	rewardButton: HTMLElement;
-	rewardButtonClose: HTMLElement;
-	rewardButtonDislike: HTMLElement;
-	rewardButtonLike: HTMLElement;
-	rewardImg: HTMLImageElement;
-	rewardModalElement: HTMLElement;
+	private gameController: Game;
+	private rewardButton: HTMLElement;
+	private rewardButtonClose: HTMLElement;
+	private rewardButtonDislike: HTMLElement;
+	private rewardButtonLike: HTMLElement;
+	private rewardImg: HTMLImageElement;
+	private rewardModalElement: HTMLElement;
 
-	handleRewardButtonClickBound: (e: Event) => void =
+	private handleRewardButtonClickBound: (e: Event) => void =
 			(e: Event) => this.handleRewardButtonClick(e);
-	handleRewardCloseClickBound: (e: Event) => void =
+	private handleRewardCloseClickBound: (e: Event) => void =
 			(e: Event) => this.handleRewardCloseClick(e);
-	handleOpinionButtonClickBound: (e: Event) => void =
+	private handleOpinionButtonClickBound: (e: Event) => void =
 			(e: Event) => this.handleOpinionButtonClick(e);
 
 	constructor(gameController: Game) {
@@ -92,26 +100,26 @@ class RewardModal {
 			this.rewardButtonLike.addEventListener('click', this.handleOpinionButtonClickBound);
 	}
 
-	showRewardModal(): void {
+	private showRewardModal(): void {
 		this.rewardModalElement.setAttribute('style', 'display: flex');
 	}
 
-	hideRewardModal(): void {
+	private hideRewardModal(): void {
 		this.rewardModalElement.setAttribute('style', 'display: none');
 	}
 
-	chooseReward(): any {
+	private chooseReward(): any {
 		const rewards = [rewardOne, rewardTwo, rewardThree];
 		const randomRewardIndex = getRandomInt(0, rewards.length);
 		return rewards[randomRewardIndex];
 	}
 
 
-	unlockReward(): void {
+	public unlockReward(): void {
 		this.rewardButton.setAttribute('style', 'visibility: visible; opacity: 1; pointer-events: auto;');
 	}
 
-	handleOpinionButtonClick(e: Event): void {
+	private handleOpinionButtonClick(e: Event): void {
 		e.stopPropagation();
 		const targetElement = <HTMLElement>e.target;
 		const secretMessage = targetElement.id === 'like'
@@ -123,13 +131,13 @@ class RewardModal {
 		this.gameController.resume();
 	}
 
-	handleRewardCloseClick(e: Event): void {
+	private handleRewardCloseClick(e: Event): void {
 		e.stopPropagation();
 		this.hideRewardModal();
 		this.gameController.resume();
 	}
 
-	handleRewardButtonClick(e: Event): void {
+	private handleRewardButtonClick(e: Event): void {
 		e.stopPropagation();
 		this.gameController.pause();
 
@@ -139,31 +147,31 @@ class RewardModal {
 }
 
 class Game {
-	canvas: HTMLCanvasElement;
-	context: CanvasRenderingContext2D;
+	private canvas: HTMLCanvasElement;
+	private context: CanvasRenderingContext2D;
 
-	pipes: Coordinates[] = [];
-	velocity = 2;
-	birbY: number = 0;
-	stage: GameStage = GameStage.READY_TO_START;
-	needToReset: boolean = true;
-	score: number = 0;
+	private pipes: Coordinates[] = [];
+	private velocity = 2;
+	private birbY: number = 0;
+	private stage: GameStage = GameStage.READY_TO_START;
+	private needToReset: boolean = true;
+	private score: number = 0;
 
-	base: HTMLImageElement;
-	newgame: HTMLImageElement;
-	gameover: HTMLImageElement;
-	pipeTop: HTMLImageElement;
-	pipeBottom: HTMLImageElement;
+	private base: HTMLImageElement;
+	private newgame: HTMLImageElement;
+	private gameover: HTMLImageElement;
+	private pipeTop: HTMLImageElement;
+	private pipeBottom: HTMLImageElement;
 
-	background: HTMLImageElement | null = null;
-	backgrounds: HTMLImageElement[] = [];
-	birb: HTMLImageElement | null = null;
-	birbs: HTMLImageElement[] = [];
-	numbers: HTMLImageElement[] = [];
+	private background: HTMLImageElement | null = null;
+	private backgrounds: HTMLImageElement[] = [];
+	private birb: HTMLImageElement | null = null;
+	private birbs: HTMLImageElement[] = [];
+	private numbers: HTMLImageElement[] = [];
 
-	rewardModal: RewardModal;
+	private rewardModal: RewardModal;
 
-	handleClickBound: () => void = () => this.handleClick();
+	private handleClickBound: () => void = () => this.handleClick();
 
 	constructor() {
 		this.canvas = <HTMLCanvasElement>document.querySelector('#canvas');
@@ -182,46 +190,80 @@ class Game {
 				new Image(), new Image(), new Image());
 	}
 
-	loadImage(img: HTMLImageElement, src: any): Promise<HTMLImageElement> {
-		const promise = new Promise<HTMLImageElement>((resolve) =>
-				img.addEventListener('load', () => resolve(img)));
-		img.src = src;
+	public async run(): Promise<void> {
+		await this.loadImages();
+		this.resetIfNeeded();
 
-		return promise;
+		window.addEventListener('click', this.handleClickBound);
 	}
 
-	async loadImages(): Promise<void> {
+	public resume(): void {
+		this.stage = GameStage.RUNNING;
+		this.drawLoop();
+	}
+
+	public pause(): void {
+		this.stage = GameStage.PAUSED;
+	}
+
+	private drawLoop(): void {
+		if (this.stage === GameStage.PAUSED) {
+			return;
+		}
+
+		if (this.stage === GameStage.GAMEOVER) {
+			this.gameOver();
+			return;
+		}
+
+		this.birb = this.selectBirb();
+
+		this.context.drawImage(this.background!, 0, 0);
+		this.drawPipes();
+		this.context!.drawImage(this.birb, BIRB_X, this.birbY);
+		this.context.drawImage(this.base, 0, this.canvas!.height - this.base.height);
+		this.displayScore();
+
+		if (this.velocity < 2) {
+			this.velocity += 0.1;
+		}
+		this.birbY += this.velocity;
+
+		requestAnimationFrame(() => this.drawLoop());
+	}
+
+	private async loadImages(): Promise<void> {
 		await Promise.all([
-			this.loadImage(this.base, baseSprite),
-			this.loadImage(this.pipeTop, pipeTopSprite),
-			this.loadImage(this.pipeBottom, pipeBottomSprite),
-			this.loadImage(this.newgame, messageSprite),
-			this.loadImage(this.gameover, gameOverSprite),
-			this.loadImage(this.backgrounds[0], backgroundDaySprite),
-			this.loadImage(this.backgrounds[1], backgroundNightSprite),
-			this.loadImage(this.birbs[BirbState.FALLING], birdUpflapSprite),
-			this.loadImage(this.birbs[BirbState.MIDFLAP], birdMidflapSprite),
-			this.loadImage(this.birbs[BirbState.RISING], birdDownflapSprite),
-			this.loadImage(this.numbers[0], zeroSprite),
-			this.loadImage(this.numbers[1], oneSprite),
-			this.loadImage(this.numbers[2], twoSprite),
-			this.loadImage(this.numbers[3], threeSprite),
-			this.loadImage(this.numbers[4], fourSprite),
-			this.loadImage(this.numbers[5], fiveSprite),
-			this.loadImage(this.numbers[6], sixSprite),
-			this.loadImage(this.numbers[7], sevenSprite),
-			this.loadImage(this.numbers[8], eightSprite),
-			this.loadImage(this.numbers[9], nineSprite),
+			loadImage(this.base, baseSprite),
+			loadImage(this.pipeTop, pipeTopSprite),
+			loadImage(this.pipeBottom, pipeBottomSprite),
+			loadImage(this.newgame, messageSprite),
+			loadImage(this.gameover, gameOverSprite),
+			loadImage(this.backgrounds[0], backgroundDaySprite),
+			loadImage(this.backgrounds[1], backgroundNightSprite),
+			loadImage(this.birbs[BirbState.FALLING], birdUpflapSprite),
+			loadImage(this.birbs[BirbState.MIDFLAP], birdMidflapSprite),
+			loadImage(this.birbs[BirbState.RISING], birdDownflapSprite),
+			loadImage(this.numbers[0], zeroSprite),
+			loadImage(this.numbers[1], oneSprite),
+			loadImage(this.numbers[2], twoSprite),
+			loadImage(this.numbers[3], threeSprite),
+			loadImage(this.numbers[4], fourSprite),
+			loadImage(this.numbers[5], fiveSprite),
+			loadImage(this.numbers[6], sixSprite),
+			loadImage(this.numbers[7], sevenSprite),
+			loadImage(this.numbers[8], eightSprite),
+			loadImage(this.numbers[9], nineSprite),
 		]);
 	}
 
-	flyUp(): void {
+	private flyUp(): void {
 		this.velocity = this.velocity - 5 < -4
 				? -4
 				: this.velocity - 5;
 	}
 
-	checkCollisions(pipe: Coordinates): boolean {
+	private checkCollisions(pipe: Coordinates): boolean {
 		const birbRight = BIRB_X + this.birb!.width;
 		const birbBottom = this.birbY + this.birb!.height;
 		const pipeTopEdge = pipe.y + this.pipeTop.height;
@@ -240,7 +282,7 @@ class Game {
 		return false;
 	}
 
-	selectBirb(): HTMLImageElement {
+	private selectBirb(): HTMLImageElement {
 		if (this.velocity > 0.12) {
 			return this.birbs[BirbState.RISING];
 		}
@@ -250,14 +292,14 @@ class Game {
 		return this.birbs[BirbState.MIDFLAP];
 	}
 
-	gameOver(): void {
+	private gameOver(): void {
 		this.context.drawImage(this.gameover,
 				this.canvas.width / 2 - this.gameover.width / 2,
 				this.canvas.height / 2 - this.gameover.height / 2);
 		this.needToReset = true;
 	}
 
-	displayScore(): void {
+	private displayScore(): void {
 		const scoreNumbers = this.score.toString().split('');
 		const scoreXStart = this.canvas.width - 10;
 		const scoreY = this.canvas.height - 10 - this.numbers[0].height;
@@ -273,7 +315,7 @@ class Game {
 		}
 	}
 
-	drawPipes(): void {
+	private drawPipes(): void {
 		let scored = false;
 		for (let i = 0; i < this.pipes.length; i++) {
 			const pipe = this.pipes[i];
@@ -314,33 +356,7 @@ class Game {
 		}
 	}
 
-	drawLoop(): void {
-		if (this.stage === GameStage.PAUSED) {
-			return;
-		}
-
-		if (this.stage === GameStage.GAMEOVER) {
-			this.gameOver();
-			return;
-		}
-
-		this.birb = this.selectBirb();
-
-		this.context.drawImage(this.background!, 0, 0);
-		this.drawPipes();
-		this.context!.drawImage(this.birb, BIRB_X, this.birbY);
-		this.context.drawImage(this.base, 0, this.canvas!.height - this.base.height);
-		this.displayScore();
-
-		if (this.velocity < 2) {
-			this.velocity += 0.1;
-		}
-		this.birbY += this.velocity;
-
-		requestAnimationFrame(() => this.drawLoop());
-	}
-
-	resetIfNeeded(): void {
+	private resetIfNeeded(): void {
 		if (!this.needToReset) {
 			return;
 		}
@@ -367,14 +383,7 @@ class Game {
 		}];
 	}
 
-	async run(): Promise<void> {
-		await this.loadImages();
-		this.resetIfNeeded();
-
-		window.addEventListener('click', this.handleClickBound);
-	}
-
-	handleClick(): void {
+	private handleClick(): void {
 		switch (this.stage) {
 			case GameStage.RUNNING:
 				this.flyUp();
@@ -391,15 +400,6 @@ class Game {
 			default:
 				return;
 		}
-	}
-
-	resume(): void {
-		this.stage = GameStage.RUNNING;
-		this.drawLoop();
-	}
-
-	pause(): void {
-		this.stage = GameStage.PAUSED;
 	}
 }
 
