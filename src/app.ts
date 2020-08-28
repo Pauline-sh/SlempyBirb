@@ -21,6 +21,10 @@ import sevenSprite from '../resources/sprites/7.png';
 import eightSprite from '../resources/sprites/8.png';
 import nineSprite from '../resources/sprites/9.png';
 
+import rewardOne from '../resources/rewards/lovely-rat.webp';
+import rewardTwo from '../resources/rewards/fine-grilled-cheese.webp';
+import rewardThree from '../resources/rewards/made-for-little-hands.webp';
+
 const SPEED = 1;
 
 const BIRB_X = 20;
@@ -45,6 +49,7 @@ interface Coordinates {
 
 enum GameStage {
 	GAMEOVER,
+	PAUSED,
 	RUNNING,
 	READY_TO_START,
 }
@@ -53,6 +58,84 @@ enum BirbState {
 	RISING,
 	MIDFLAP,
 	FALLING,
+}
+
+class RewardModal {
+	gameController: Game;
+	rewardButton: HTMLElement;
+	rewardButtonClose: HTMLElement;
+	rewardButtonDislike: HTMLElement;
+	rewardButtonLike: HTMLElement;
+	rewardImg: HTMLImageElement;
+	rewardModalElement: HTMLElement;
+
+	handleRewardButtonClickBound: (e: Event) => void =
+			(e: Event) => this.handleRewardButtonClick(e);
+	handleRewardCloseClickBound: (e: Event) => void =
+			(e: Event) => this.handleRewardCloseClick(e);
+	handleOpinionButtonClickBound: (e: Event) => void =
+			(e: Event) => this.handleOpinionButtonClick(e);
+
+	constructor(gameController: Game) {
+			this.gameController = gameController;
+
+			this.rewardButton = <HTMLElement>document.querySelector('#get-reward');
+			this.rewardImg = <HTMLImageElement>document.querySelector('#reward-img');
+			this.rewardModalElement = <HTMLImageElement>document.querySelector('#reward-modal');
+			this.rewardButtonClose = <HTMLElement>document.querySelector('#close');
+			this.rewardButtonDislike = <HTMLElement>document.querySelector('#dislike');
+			this.rewardButtonLike = <HTMLElement>document.querySelector('#like');
+
+			this.rewardButton.addEventListener('click', this.handleRewardButtonClickBound);
+			this.rewardButtonClose.addEventListener('click', this.handleRewardCloseClickBound);
+			this.rewardButtonDislike.addEventListener('click', this.handleOpinionButtonClickBound);
+			this.rewardButtonLike.addEventListener('click', this.handleOpinionButtonClickBound);
+	}
+
+	showRewardModal(): void {
+		this.rewardModalElement.setAttribute('style', 'display: flex');
+	}
+
+	hideRewardModal(): void {
+		this.rewardModalElement.setAttribute('style', 'display: none');
+	}
+
+	chooseReward(): any {
+		const rewards = [rewardOne, rewardTwo, rewardThree];
+		const randomRewardIndex = getRandomInt(0, rewards.length);
+		return rewards[randomRewardIndex];
+	}
+
+
+	unlockReward(): void {
+		this.rewardButton.setAttribute('style', 'visibility: visible; opacity: 1; pointer-events: auto;');
+	}
+
+	handleOpinionButtonClick(e: Event): void {
+		e.stopPropagation();
+		const targetElement = <HTMLElement>e.target;
+		const secretMessage = targetElement.id === 'like'
+				? `Rats are gorgeous, cheese is delicious, Our tastes are alike and You are so precious! (◕‿◕)♡`
+				: `Roses are red, cheese is yummy, don't you like rats? - I'll try better ┐( ˘ ､ ˘ )┌`;
+
+		console.log(secretMessage);
+		this.hideRewardModal();
+		this.gameController.resume();
+	}
+
+	handleRewardCloseClick(e: Event): void {
+		e.stopPropagation();
+		this.hideRewardModal();
+		this.gameController.resume();
+	}
+
+	handleRewardButtonClick(e: Event): void {
+		e.stopPropagation();
+		this.gameController.pause();
+
+		this.rewardImg.src = this.chooseReward();
+		this.showRewardModal();
+	}
 }
 
 class Game {
@@ -78,11 +161,14 @@ class Game {
 	birbs: HTMLImageElement[] = [];
 	numbers: HTMLImageElement[] = [];
 
+	rewardModal: RewardModal;
+
 	handleClickBound: () => void = () => this.handleClick();
 
 	constructor() {
 		this.canvas = <HTMLCanvasElement>document.querySelector('#canvas');
 		this.context = this.canvas.getContext('2d')!;
+		this.rewardModal = new RewardModal(this);
 
 		this.base = new Image();
 		this.newgame = new Image();
@@ -214,6 +300,10 @@ class Game {
 			if (!scored && pipe.x + this.pipeTop.width - 10 === BIRB_X) {
 				this.score++;
 				scored = false;
+
+				if (this.score >= 5) {
+					this.rewardModal.unlockReward();
+				}
 			}
 
 			// Remove pipe if it's off screen.
@@ -225,6 +315,10 @@ class Game {
 	}
 
 	drawLoop(): void {
+		if (this.stage === GameStage.PAUSED) {
+			return;
+		}
+
 		if (this.stage === GameStage.GAMEOVER) {
 			this.gameOver();
 			return;
@@ -297,6 +391,15 @@ class Game {
 			default:
 				return;
 		}
+	}
+
+	resume(): void {
+		this.stage = GameStage.RUNNING;
+		this.drawLoop();
+	}
+
+	pause(): void {
+		this.stage = GameStage.PAUSED;
 	}
 }
 
